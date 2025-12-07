@@ -1,0 +1,76 @@
+services:
+  # FlickCode Services
+  app:
+    build:
+      context: .
+      dockerfile: FlickCode/Dockerfile
+    container_name: flickcode
+    environment:
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
+    restart: unless-stopped
+    networks:
+      - app-network
+  auth:
+    build:
+      context: .
+      dockerfile: FlickCode-auth/Dockerfile
+    container_name: flickcode-auth
+    environment:
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
+      - CLIENT_ID=${CLIENT_ID}
+      - CLIENT_SECRET=${CLIENT_SECRET}
+      - GMAIL=${GMAIL}
+    restart: unless-stopped
+    networks:
+      - app-network
+    volumes:
+      - user-files:/flick-code/user_files
+      - shared-config:/flick-code/config
+  dashboard:
+    build:
+      context: .
+      dockerfile: FlickCode-dashboard/Dockerfile
+    container_name: flickcode-dashboard
+    environment:
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
+    restart: unless-stopped
+    networks:
+      - app-network
+    volumes:
+      - user-files:/flick-code/user_files
+      - shared-config:/flick-code/config
+  makecode:
+    build:
+      context: .
+      dockerfile: FlickCode-makecode/Dockerfile
+    container_name: flickcode-makecode
+    environment:
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
+    restart: unless-stopped
+    networks:
+      - app-network
+    volumes:
+      - user-files:/flick-code/user_files
+      - shared-config:/flick-code/config
+
+  # Cloudflare Tunnel
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-tunnel
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    restart: unless-stopped
+    networks:
+      - app-network
+    depends_on:
+      - app
+      - auth
+      - dashboard
+      - makecode
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  user-files:
+  shared-config:
