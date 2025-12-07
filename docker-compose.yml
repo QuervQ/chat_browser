@@ -53,6 +53,19 @@ services:
       - user-files:/flick-code/user_files
       - shared-config:/flick-code/config
 
+  makecode-ui:
+    build:
+      context: .
+      dockerfile: frontend-makecode/Dockerfile
+    container_name: front-makecode
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    networks:
+      - app-network
+    depends_on:
+      - makecode
+
   # Cloudflare Tunnel
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -66,6 +79,7 @@ services:
       - auth
       - dashboard
       - makecode
+      - makecode-ui
 
 networks:
   app-network:
