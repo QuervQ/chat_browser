@@ -27,6 +27,37 @@
     .header .share-button:hover {
       background: #5568d3;
     }
+    .header .url-display {
+      margin-top: 12px;
+      padding: 10px;
+      background: #f5f5f5;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #666;
+      word-break: break-all;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header .url-display .url-text {
+      flex: 1;
+      user-select: all;
+      cursor: text;
+    }
+    .header .url-display .copy-icon {
+      cursor: pointer;
+      padding: 4px 8px;
+      background: #667eea;
+      color: white;
+      border-radius: 4px;
+      font-size: 11px;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+    .header .url-display .copy-icon:hover {
+      background: #5568d3;
+    }
     .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4caf50; margin-right: 8px; }
     
     .container { display: flex; gap: 20px; }
@@ -147,7 +178,10 @@
     <div style="font-size: 12px; color: #999; margin-top: 8px;">
       <span id="connectionStatus">接続中...</span>
     </div>
-    <button class="share-button" onclick="copyRoomUrl()">🔗 ルームURLをコピー</button>
+    <div class="url-display">
+      <span class="url-text" id="roomUrl" onclick="selectUrlText()">読み込み中...</span>
+      <span class="copy-icon" onclick="copyRoomUrl()">📋 コピー</span>
+    </div>
   </div>
 
   <div class="container">
@@ -192,6 +226,10 @@
     // URLからroomId取得
     const roomId = window.location.pathname.split('/').pop();
     document.getElementById('roomId').textContent = roomId;
+    
+    // ルームURLを表示
+    const roomUrl = window.location.href;
+    document.getElementById('roomUrl').textContent = roomUrl;
 
     // ユーザー情報の取得/生成
     function getOrCreateUser() {
@@ -414,21 +452,115 @@
     }
 
     // ルームURLをコピー
-    function copyRoomUrl() {
+    async function copyRoomUrl() {
       const url = window.location.href;
-      navigator.clipboard.writeText(url).then(() => {
-        const button = event.target;
-        const originalText = button.textContent;
-        button.textContent = '✅ コピーしました！';
-        button.style.background = '#4caf50';
-        setTimeout(() => {
-          button.textContent = originalText;
-          button.style.background = '#667eea';
-        }, 2000);
-      }).catch(err => {
+      const copyIcon = event.target;
+      const originalText = copyIcon.textContent;
+      
+      try {
+        // モダンなClipboard APIを試す
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(url);
+          copyIcon.textContent = '✅ コピー完了';
+          copyIcon.style.background = '#4caf50';
+          
+          setTimeout(() => {
+            copyIcon.textContent = originalText;
+            copyIcon.style.background = '#667eea';
+          }, 2000);
+        } else {
+          // フォールバック: テキストエリアを使った古い方法
+          const textArea = document.createElement('textarea');
+          textArea.value = url;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-9999px';
+          document.body.appendChild(textArea);
+          textArea.select();
+          
+          try {
+            document.execCommand('copy');
+            copyIcon.textContent = '✅ コピー完了';
+            copyIcon.style.background = '#4caf50';
+            
+            setTimeout(() => {
+              copyIcon.textContent = originalText;
+              copyIcon.style.background = '#667eea';
+            }, 2000);
+          } catch (err) {
+            console.error('フォールバックコピー失敗:', err);
+            showUrlModal(url);
+          } finally {
+            document.body.removeChild(textArea);
+          }
+        }
+      } catch (err) {
         console.error('コピー失敗:', err);
-        alert('URLのコピーに失敗しました: ' + url);
-      });
+        // エラーの場合はURLを表示するモーダルを出す
+        showUrlModal(url);
+      }
+    }
+    
+    // URLテキストを選択
+    function selectUrlText() {
+      const urlText = document.getElementById('roomUrl');
+      const range = document.createRange();
+      range.selectNodeContents(urlText);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    
+    // URLを表示するモーダル
+    function showUrlModal(url) {
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+      `;
+      
+      modal.innerHTML = `
+        <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%;">
+          <h3 style="margin: 0 0 16px 0; color: #333;">🔗 ルームURLを共有</h3>
+          <p style="color: #666; margin-bottom: 16px; font-size: 14px;">
+            以下のURLをコピーして友達に送ってください：
+          </p>
+          <input 
+            type="text" 
+            value="${url}" 
+            readonly 
+            onclick="this.select()"
+            style="width: 100%; padding: 12px; border: 2px solid #667eea; border-radius: 6px; font-size: 14px; margin-bottom: 16px;"
+          />
+          <button 
+            onclick="this.parentElement.parentElement.remove()"
+            style="width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;"
+          >
+            閉じる
+          </button>
+        </div>
+      `;
+      
+      modal.onclick = (e) => {
+        if (e.target === modal) {
+          modal.remove();
+        }
+      };
+      
+      document.body.appendChild(modal);
+      
+      // 自動選択
+      setTimeout(() => {
+        const input = modal.querySelector('input');
+        input.select();
+      }, 100);
     }
 
     // Enterキーで送信
