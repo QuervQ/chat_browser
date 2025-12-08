@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Room - Realtime Direct</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/9.0.0/uuid.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/9.0.0/uuid.min.js" crossorigin="anonymous"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; background: #f5f5f5; }
@@ -227,6 +227,19 @@
       const raw = localStorage.getItem(key);
       if (raw) return JSON.parse(raw);
       
+      // uuidが利用可能か確認
+      if (typeof uuid === 'undefined' || !uuid.v4) {
+        console.error('❌ uuid.jsが読み込まれていません');
+        // フォールバック: ランダムIDを生成
+        const randomId = 'user-' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        const u = { 
+          id: randomId, 
+          name: `User-${Math.random().toString(36).slice(2, 7)}` 
+        };
+        localStorage.setItem(key, JSON.stringify(u));
+        return u;
+      }
+      
       const u = { 
         id: uuid.v4(), 
         name: `User-${Math.random().toString(36).slice(2, 7)}` 
@@ -235,6 +248,7 @@
       return u;
     }
 
+    // グローバル変数としてuserを定義
     const user = getOrCreateUser();
     document.getElementById('userInfo').textContent = `あなた: ${user.name} (${user.id.slice(0, 6)})`;
 
@@ -530,19 +544,29 @@
       selection.addRange(range);
     }
 
-    // 初期化
-    console.log('🚀 ルーム初期化開始...', { roomId, user });
-    updateStatus('connecting', '🟠 接続中...', '#ff9800');
+    // 初期化を実行する関数
+    function initialize() {
+      console.log('🚀 ルーム初期化開始...', { roomId, user });
+      updateStatus('connecting', '🟠 接続中...', '#ff9800');
 
-    Promise.all([
-      initPresence(),
-      initMessages()
-    ]).then(() => {
-      console.log('✅ すべての初期化完了');
-    }).catch(err => {
-      console.error('❌ 初期化エラー:', err);
-      updateStatus('error', '🔴 初期化失敗', '#f44336');
-    });
+      Promise.all([
+        initPresence(),
+        initMessages()
+      ]).then(() => {
+        console.log('✅ すべての初期化完了');
+      }).catch(err => {
+        console.error('❌ 初期化エラー:', err);
+        updateStatus('error', '🔴 初期化失敗', '#f44336');
+      });
+    }
+
+    // DOMとすべてのスクリプトが読み込まれてから実行
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initialize);
+    } else {
+      // すでに読み込まれている場合は即座に実行
+      initialize();
+    }
 
     // クリーンアップ
     window.addEventListener('beforeunload', () => {
