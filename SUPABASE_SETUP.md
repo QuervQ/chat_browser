@@ -44,13 +44,15 @@ CREATE POLICY "Allow public insert access"
   TO PUBLIC
   WITH CHECK (true);
 
--- Realtimeを有効化
+-- Realtimeを有効化（既に追加済みの場合はエラーが出ますが問題ありません）
 ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 ```
 
 ### 4. 確認
 
 実行後、「Table Editor」で`messages`テーブルが表示されることを確認してください。
+
+**⚠️ 注意**: `"messages" is already member of publication "supabase_realtime"` というエラーが出る場合は、すでに正しく設定されているので無視してOKです。
 
 ## 📊 テーブル構造
 
