@@ -322,7 +322,20 @@
     });
 
     realtimeManager.on('onChannelStatus', (status) => {
-      console.log('チャンネル状態:', status);
+      console.log('📡 チャンネル状態:', status);
+      
+      // ステータス表示を更新
+      const statusDot = document.querySelector('.status');
+      if (status.status === 'SUBSCRIBED') {
+        statusDot.style.background = '#4caf50'; // 緑
+        statusDot.title = `${status.channel} チャンネル: 接続中`;
+      } else if (status.status === 'CHANNEL_ERROR') {
+        statusDot.style.background = '#f44336'; // 赤
+        statusDot.title = `${status.channel} チャンネル: エラー`;
+      } else {
+        statusDot.style.background = '#ff9800'; // オレンジ
+        statusDot.title = `${status.channel} チャンネル: ${status.status}`;
+      }
     });
 
     // カーソル移動
@@ -343,15 +356,31 @@
       const input = document.getElementById('messageInput');
       const text = input.value.trim();
       
-      if (!text) return;
+      if (!text) {
+        console.warn('空のメッセージは送信できません');
+        return;
+      }
+      
+      console.log('📤 メッセージ送信中:', text);
       
       const result = await realtimeManager.sendMessage(text);
       
       if (result.success) {
         input.value = '';
-        console.log('メッセージ送信成功');
+        console.log('✅ メッセージ送信成功:', result.data);
       } else {
-        console.error('メッセージ送信失敗:', result.error);
+        console.error('❌ メッセージ送信失敗:', result.error);
+        
+        // ユーザーにエラーを表示
+        const errorMsg = result.error?.message || result.error?.toString() || '不明なエラー';
+        
+        if (errorMsg.includes('permission denied') || errorMsg.includes('policy')) {
+          alert('⚠️ データベースのアクセス権限エラー\n\nSupabaseでmessagesテーブルのRLSポリシーを設定してください。\n詳細: SUPABASE_SETUP.md を確認');
+        } else if (errorMsg.includes('does not exist') || errorMsg.includes('relation')) {
+          alert('⚠️ データベーステーブルが存在しません\n\nSupabaseでmessagesテーブルを作成してください。\n詳細: SUPABASE_SETUP.md を確認');
+        } else {
+          alert(`⚠️ メッセージ送信エラー\n\n${errorMsg}`);
+        }
       }
     }
 
