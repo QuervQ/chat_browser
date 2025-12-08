@@ -8,6 +8,16 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static('public'));
 app.use('/src', express.static('src'));
 
+// デバッグページ
+app.get('/debug-messages.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'debug-messages.html'));
+});
+
+// テストページ
+app.get('/test.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'test.html'));
+});
+
 // ルームページへのルーティング（v2を使用）
 app.get('/room/:roomId', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'room-v2.html'));

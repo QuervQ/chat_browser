@@ -12,6 +12,10 @@
       "dest": "/src/$1"
     },
     {
+      "src": "/(.*)\\.html",
+      "dest": "/public/$1.html"
+    },
+    {
       "src": "/room/(.*)",
       "dest": "/server.js"
     },
