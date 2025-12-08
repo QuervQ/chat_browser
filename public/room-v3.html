@@ -5,7 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Room - Realtime Direct</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/9.0.0/uuid.min.js" crossorigin="anonymous"></script>
+  <!-- uuid.jsを複数のCDNからフォールバックで読み込み -->
+  <script>
+    // uuid.jsをフォールバックで読み込む
+    (function loadUuid() {
+      const script1 = document.createElement('script');
+      script1.src = 'https://cdn.jsdelivr.net/npm/uuid@9.0.0/dist/umd/uuidv4.min.js';
+      script1.onerror = function() {
+        console.warn('uuid.js CDN1失敗、CDN2を試します');
+        const script2 = document.createElement('script');
+        script2.src = 'https://unpkg.com/uuid@9.0.0/dist/umd/uuidv4.min.js';
+        script2.onerror = function() {
+          console.warn('uuid.js CDN2失敗、フォールバック関数を使用');
+        };
+        document.head.appendChild(script2);
+      };
+      document.head.appendChild(script1);
+    })();
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; background: #f5f5f5; }
@@ -227,21 +244,32 @@
       const raw = localStorage.getItem(key);
       if (raw) return JSON.parse(raw);
       
-      // uuidが利用可能か確認
-      if (typeof uuid === 'undefined' || !uuid.v4) {
-        console.error('❌ uuid.jsが読み込まれていません');
-        // フォールバック: ランダムIDを生成
-        const randomId = 'user-' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        const u = { 
-          id: randomId, 
-          name: `User-${Math.random().toString(36).slice(2, 7)}` 
-        };
-        localStorage.setItem(key, JSON.stringify(u));
-        return u;
+      // UUID生成（複数の方法を試す）
+      let userId;
+      
+      // 方法1: uuid.v4()
+      if (typeof uuid !== 'undefined' && uuid.v4) {
+        userId = uuid.v4();
+        console.log('✅ uuid.v4()でID生成');
+      }
+      // 方法2: uuidv4() (別のCDN形式)
+      else if (typeof uuidv4 !== 'undefined') {
+        userId = uuidv4();
+        console.log('✅ uuidv4()でID生成');
+      }
+      // 方法3: crypto API (モダンブラウザ)
+      else if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        userId = crypto.randomUUID();
+        console.log('✅ crypto.randomUUID()でID生成');
+      }
+      // 方法4: フォールバック
+      else {
+        console.warn('⚠️ uuid.jsが読み込まれていません、フォールバック使用');
+        userId = 'user-' + Date.now() + '-' + Math.random().toString(36).substring(2, 15);
       }
       
       const u = { 
-        id: uuid.v4(), 
+        id: userId, 
         name: `User-${Math.random().toString(36).slice(2, 7)}` 
       };
       localStorage.setItem(key, JSON.stringify(u));
@@ -447,31 +475,6 @@
       }
     }
 
-    // カーソル移動
-    document.getElementById('canvas').addEventListener('mousemove', (e) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      const y = (e.clientY - rect.top) / rect.height;
-      
-      if (presenceChannel) {
-        presenceChannel.send({
-          type: 'broadcast',
-          event: 'cursor',
-          payload: { 
-            user_id: user.id, 
-            x, 
-            y, 
-            name: user.name,
-            timestamp: Date.now()
-          }
-        });
-      }
-      
-      // ローカルカーソルも即座に更新
-      cursors[user.id] = { x, y, name: user.name, user_id: user.id };
-      updateCursors();
-    });
-
     // メッセージ送信
     async function sendMessage() {
       const input = document.getElementById('messageInput');
@@ -503,13 +506,6 @@
         input.value = '';
       }
     }
-
-    // Enterキーで送信
-    document.getElementById('messageInput').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        sendMessage();
-      }
-    });
 
     // URLコピー
     async function copyRoomUrl() {
@@ -549,11 +545,50 @@
       console.log('🚀 ルーム初期化開始...', { roomId, user });
       updateStatus('connecting', '🟠 接続中...', '#ff9800');
 
+      // カーソル移動イベント
+      const canvas = document.getElementById('canvas');
+      if (canvas) {
+        canvas.addEventListener('mousemove', (e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = (e.clientX - rect.left) / rect.width;
+          const y = (e.clientY - rect.top) / rect.height;
+          
+          if (presenceChannel && presenceChannel.state === 'joined') {
+            console.log('🖱️ カーソル送信:', { x: x.toFixed(2), y: y.toFixed(2) });
+            presenceChannel.send({
+              type: 'broadcast',
+              event: 'cursor',
+              payload: { 
+                user_id: user.id, 
+                x, 
+                y, 
+                name: user.name,
+                timestamp: Date.now()
+              }
+            });
+          } else {
+            console.warn('⚠️ Presenceチャンネルが未接続:', presenceChannel?.state);
+          }
+        });
+      }
+
+      // メッセージ入力のEnterキー
+      const messageInput = document.getElementById('messageInput');
+      if (messageInput) {
+        messageInput.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            sendMessage();
+          }
+        });
+      }
+
       Promise.all([
         initPresence(),
         initMessages()
       ]).then(() => {
         console.log('✅ すべての初期化完了');
+        console.log('📊 Presenceチャンネル状態:', presenceChannel?.state);
+        console.log('📊 Messagesチャンネル状態:', messagesChannel?.state);
       }).catch(err => {
         console.error('❌ 初期化エラー:', err);
         updateStatus('error', '🔴 初期化失敗', '#f44336');
