@@ -85,16 +85,18 @@ class SupabaseRealtimeManager {
 
       // メッセージのRealtime購読（データベース変更監視）
       this.messagesChannel = this.supabase
-        .channel(`public:messages:room-${roomId}`)
+        .channel(`messages:${roomId}`)
         .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
           filter: `room_id=eq.${roomId}`
         }, (payload) => {
+          console.log('📨 Realtimeメッセージ受信:', payload.new);
           this.callbacks.onMessageReceived(payload.new);
         })
         .subscribe((status) => {
+          console.log(`📡 Messagesチャンネル状態: ${status}`);
           this.callbacks.onChannelStatus({ channel: 'messages', status });
         });
 

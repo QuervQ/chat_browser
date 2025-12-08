@@ -362,8 +362,17 @@
     });
 
     realtimeManager.on('onMessageReceived', (message) => {
-      console.log('新しいメッセージ:', message);
+      console.log('🎉 新しいメッセージ受信:', message);
+      console.log('現在のメッセージ数:', allMessages.length);
+      
+      // 重複チェック
+      if (allMessages.find(m => m.id === message.id)) {
+        console.log('⚠️ 重複メッセージ、スキップ');
+        return;
+      }
+      
       allMessages.push(message);
+      console.log('✅ メッセージ追加完了、新しい合計:', allMessages.length);
       displayMessages(allMessages);
     });
 
@@ -571,12 +580,14 @@
     });
 
     // ルーム参加
-    console.log('🚀 ルームに参加中...');
+    console.log('🚀 ルームに参加中...', { roomId, user });
     realtimeManager.joinRoom(roomId, user).then(result => {
       if (result.success) {
         console.log('✅ ルーム参加成功');
+        console.log('📊 ステータス:', realtimeManager.getStatus());
       } else {
         console.error('❌ ルーム参加失敗:', result.error);
+        alert('ルーム参加に失敗しました: ' + result.error?.message);
       }
     });
 
