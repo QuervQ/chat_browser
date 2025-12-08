@@ -12,6 +12,21 @@
     .header { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .header h1 { font-size: 24px; color: #333; }
     .header .user-info { color: #666; margin-top: 8px; }
+    .header .share-button {
+      margin-top: 12px;
+      padding: 8px 16px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .header .share-button:hover {
+      background: #5568d3;
+    }
     .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4caf50; margin-right: 8px; }
     
     .container { display: flex; gap: 20px; }
@@ -127,8 +142,12 @@
 </head>
 <body>
   <div class="header">
-    <h1><span class="status"></span>Room: <span id="roomId"></span></h1>
+    <h1><span class="status" id="statusDot"></span>Room: <span id="roomId"></span></h1>
     <div class="user-info" id="userInfo"></div>
+    <div style="font-size: 12px; color: #999; margin-top: 8px;">
+      <span id="connectionStatus">接続中...</span>
+    </div>
+    <button class="share-button" onclick="copyRoomUrl()">🔗 ルームURLをコピー</button>
   </div>
 
   <div class="container">
@@ -325,16 +344,26 @@
       console.log('📡 チャンネル状態:', status);
       
       // ステータス表示を更新
-      const statusDot = document.querySelector('.status');
+      const statusDot = document.getElementById('statusDot');
+      const statusText = document.getElementById('connectionStatus');
+      
       if (status.status === 'SUBSCRIBED') {
         statusDot.style.background = '#4caf50'; // 緑
         statusDot.title = `${status.channel} チャンネル: 接続中`;
+        if (status.channel === 'messages') {
+          statusText.textContent = '🟢 リアルタイム接続中';
+          statusText.style.color = '#4caf50';
+        }
       } else if (status.status === 'CHANNEL_ERROR') {
         statusDot.style.background = '#f44336'; // 赤
         statusDot.title = `${status.channel} チャンネル: エラー`;
+        statusText.textContent = '🔴 接続エラー';
+        statusText.style.color = '#f44336';
       } else {
         statusDot.style.background = '#ff9800'; // オレンジ
         statusDot.title = `${status.channel} チャンネル: ${status.status}`;
+        statusText.textContent = `🟠 ${status.status}`;
+        statusText.style.color = '#ff9800';
       }
     });
 
@@ -382,6 +411,24 @@
           alert(`⚠️ メッセージ送信エラー\n\n${errorMsg}`);
         }
       }
+    }
+
+    // ルームURLをコピー
+    function copyRoomUrl() {
+      const url = window.location.href;
+      navigator.clipboard.writeText(url).then(() => {
+        const button = event.target;
+        const originalText = button.textContent;
+        button.textContent = '✅ コピーしました！';
+        button.style.background = '#4caf50';
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.background = '#667eea';
+        }, 2000);
+      }).catch(err => {
+        console.error('コピー失敗:', err);
+        alert('URLのコピーに失敗しました: ' + url);
+      });
     }
 
     // Enterキーで送信
