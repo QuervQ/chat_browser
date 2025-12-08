@@ -1,0 +1,3 @@
+// Supabase設定
+const SUPABASE_URL = 'https://wzjasatwikzfwfnudxkm.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6amFzYXR3aWt6ZndmbnVkeGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxNTkwMzksImV4cCI6MjA4MDczNTAzOX0.YtUCl1dQc4JlBP4Nvkuki2UHtYCfe98I8uGrIQ0Ehic';

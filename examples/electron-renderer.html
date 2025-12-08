@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Electron + Supabase Realtime Example</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .status { padding: 10px; margin-bottom: 20px; background: #f0f0f0; }
+    .status.connected { background: #d4edda; }
+    .messages { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+    .message { margin-bottom: 8px; }
+    input { width: 80%; padding: 8px; }
+    button { padding: 8px 16px; }
+    .members { margin-top: 20px; }
+    .canvas { border: 1px solid #ccc; height: 200px; position: relative; margin-top: 20px; }
+    .cursor { position: absolute; }
+  </style>
+</head>
+<body>
+  <h1>Electron + Supabase Realtime デモ</h1>
+  
+  <div class="status" id="status">切断中</div>
+
+  <div>
+    <input type="text" id="roomInput" placeholder="ルームID" value="test-room" />
+    <button onclick="joinRoom()">参加</button>
+    <button onclick="disconnect()">退出</button>
+  </div>
+
+  <div class="members">
+    <h3>参加者</h3>
+    <div id="membersList"></div>
+  </div>
+
+  <div class="canvas" id="canvas" onmousemove="handleMouseMove(event)">
+    カーソル共有エリア
+  </div>
+
+  <h3>チャット</h3>
+  <div class="messages" id="messages"></div>
+  
+  <div>
+    <input type="text" id="messageInput" placeholder="メッセージを入力" />
+    <button onclick="sendMessage()">送信</button>
+  </div>
+
+  <script>
+    const user = {
+      id: 'electron-user-' + Math.random().toString(36).slice(2, 8),
+      name: 'Electron User'
+    };
+
+    let isConnected = false;
+    let messages = [];
+
+    // イベントリスナー設定
+    window.supabaseRealtime.onStatus((status) => {
+      console.log('Status:', status);
+      if (status.status === 'SUBSCRIBED') {
+        isConnected = true;
+        document.getElementById('status').textContent = '接続中';
+        document.getElementById('status').classList.add('connected');
+      }
+    });
+
+    window.supabaseRealtime.onMessagesLoaded((msgs) => {
+      console.log('Messages loaded:', msgs.length);
+      messages = msgs;
+      displayMessages();
+    });
+
+    window.supabaseRealtime.onMessage((message) => {
+      console.log('New message:', message);
+      messages.push(message);
+      displayMessages();
+    });
+
+    window.supabaseRealtime.onMembers((members) => {
+      console.log('Members:', members);
+      displayMembers(members);
+    });
+
+    window.supabaseRealtime.onCursor((cursor) => {
+      displayCursor(cursor);
+    });
+
+    window.supabaseRealtime.onError((error) => {
+      console.error('Error:', error);
+      alert('エラー: ' + error.error.message);
+    });
+
+    // ルーム参加
+    async function joinRoom() {
+      const roomId = document.getElementById('roomInput').value;
+      if (!roomId) return;
+
+      const result = await window.supabaseRealtime.joinRoom(roomId, user);
+      if (result.success) {
+        console.log('ルーム参加成功');
+      } else {
+        console.error('ルーム参加失敗:', result.error);
+      }
+    }
+
+    // 切断
+    function disconnect() {
+      window.supabaseRealtime.disconnect();
+      isConnected = false;
+      document.getElementById('status').textContent = '切断中';
+      document.getElementById('status').classList.remove('connected');
+    }
+
+    // メッセージ送信
+    async function sendMessage() {
+      const input = document.getElementById('messageInput');
+      const content = input.value.trim();
+      if (!content) return;
+
+      const result = await window.supabaseRealtime.sendMessage(content);
+      if (result.success) {
+        input.value = '';
+      }
+    }
+
+    // メッセージ表示
+    function displayMessages() {
+      const messagesDiv = document.getElementById('messages');
+      messagesDiv.innerHTML = '';
+      
+      messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = 'message';
+        div.innerHTML = `<strong>${msg.name}</strong>: ${msg.content}`;
+        messagesDiv.appendChild(div);
+      });
+
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // 参加者表示
+    function displayMembers(members) {
+      const membersList = document.getElementById('membersList');
+      membersList.innerHTML = '';
+
+      Object.values(members).forEach(member => {
+        if (member && member.length > 0) {
+          const div = document.createElement('div');
+          div.textContent = member[0].name;
+          membersList.appendChild(div);
+        }
+      });
+    }
+
+    // カーソル表示
+    const cursors = {};
+    function displayCursor(cursor) {
+      cursors[cursor.user_id] = cursor;
+      
+      const canvas = document.getElementById('canvas');
+      canvas.querySelectorAll('.cursor').forEach(el => el.remove());
+
+      Object.values(cursors).forEach(c => {
+        const cursorEl = document.createElement('div');
+        cursorEl.className = 'cursor';
+        cursorEl.style.left = `${c.x * 100}%`;
+        cursorEl.style.top = `${c.y * 100}%`;
+        cursorEl.textContent = c.name;
+        canvas.appendChild(cursorEl);
+      });
+    }
+
+    // マウス移動
+    function handleMouseMove(e) {
+      if (!isConnected) return;
+
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      
+      window.supabaseRealtime.sendCursor(x, y);
+    }
+
+    // Enterキーで送信
+    document.getElementById('messageInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+
+    // WebRTC統合例
+    // peerConnection.addEventListener('connectionstatechange', () => {
+    //   window.webrtc.stateChanged({
+    //     connectionState: peerConnection.connectionState,
+    //     videoEnabled: localStream.getVideoTracks()[0]?.enabled,
+    //     audioEnabled: localStream.getAudioTracks()[0]?.enabled
+    //   });
+    // });
+  </script>
+</body>
+</html>

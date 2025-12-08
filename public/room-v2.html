@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Room v2 - Modular</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/9.0.0/uuid.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; background: #f5f5f5; }
+    .header { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .header h1 { font-size: 24px; color: #333; }
+    .header .user-info { color: #666; margin-top: 8px; }
+    .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4caf50; margin-right: 8px; }
+    
+    .container { display: flex; gap: 20px; }
+    
+    .left-panel { width: 520px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .canvas { 
+      border: 2px dashed #ddd; 
+      height: 360px; 
+      position: relative; 
+      margin-bottom: 20px; 
+      border-radius: 8px;
+      background: #fafafa;
+      overflow: hidden;
+    }
+    .canvas-hint { 
+      position: absolute; 
+      top: 50%; 
+      left: 50%; 
+      transform: translate(-50%, -50%); 
+      color: #999; 
+      pointer-events: none;
+      text-align: center;
+    }
+    
+    .cursor { 
+      position: absolute; 
+      pointer-events: none; 
+      transform: translate(-50%, -100%);
+      z-index: 10;
+      transition: left 0.1s, top 0.1s;
+    }
+    .cursor-label { 
+      background: rgba(0, 0, 0, 0.8); 
+      color: white; 
+      padding: 4px 8px; 
+      border-radius: 6px; 
+      font-size: 11px;
+      white-space: nowrap;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .cursor-dot { 
+      width: 12px; 
+      height: 12px; 
+      border-radius: 50%; 
+      background: #007bff;
+      margin: 4px auto 0;
+      border: 2px solid white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .members-section h3 { margin-bottom: 12px; color: #333; font-size: 18px; }
+    .members-list { list-style: none; }
+    .members-list li { 
+      padding: 8px 12px; 
+      background: #f8f9fa; 
+      border-radius: 6px; 
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: #555;
+    }
+    .members-list li .member-status { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4caf50; margin-right: 8px; }
+    
+    .right-panel { flex: 1; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
+    .right-panel h3 { margin-bottom: 16px; color: #333; font-size: 18px; }
+    
+    .messages { 
+      flex: 1;
+      overflow-y: auto; 
+      border: 1px solid #e0e0e0; 
+      padding: 16px; 
+      margin-bottom: 16px;
+      border-radius: 8px;
+      background: #fafafa;
+      min-height: 400px;
+    }
+    .message { 
+      margin-bottom: 16px; 
+      padding: 12px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .message strong { color: #007bff; font-weight: 600; }
+    .message .time { color: #999; font-size: 11px; margin-left: 8px; }
+    .message .content { margin-top: 6px; color: #333; line-height: 1.5; }
+    
+    .input-area { display: flex; gap: 12px; }
+    .input-area input { 
+      flex: 1; 
+      padding: 12px 16px; 
+      border: 2px solid #e0e0e0; 
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+    .input-area input:focus { 
+      outline: none; 
+      border-color: #007bff; 
+    }
+    .input-area button { 
+      padding: 12px 24px; 
+      background: #007bff; 
+      color: white; 
+      border: none; 
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .input-area button:hover { background: #0056b3; }
+    .input-area button:active { transform: scale(0.98); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1><span class="status"></span>Room: <span id="roomId"></span></h1>
+    <div class="user-info" id="userInfo"></div>
+  </div>
+
+  <div class="container">
+    <div class="left-panel">
+      <div class="canvas" id="canvas">
+        <div class="canvas-hint">
+          <div> マウスを動かしてみてください</div>
+          <div style="font-size: 12px; margin-top: 8px; color: #bbb;">他のユーザーのカーソルがリアルタイムで表示されます</div>
+        </div>
+      </div>
+      
+      <div class="members-section">
+        <h3> 参加者 (<span id="memberCount">0</span>)</h3>
+        <ul class="members-list" id="membersList"></ul>
+      </div>
+    </div>
+    
+    <div class="right-panel">
+      <h3>💬 チャット</h3>
+      <div class="messages" id="messages">
+        <div style="text-align: center; color: #999; padding: 40px 20px;">
+          <div style="font-size: 48px; margin-bottom: 16px;">💭</div>
+          <div>メッセージはまだありません</div>
+          <div style="font-size: 12px; margin-top: 8px;">最初のメッセージを送信してみましょう</div>
+        </div>
+      </div>
+      <div class="input-area">
+        <input type="text" id="messageInput" placeholder="メッセージを入力..." />
+        <button onclick="sendMessage()">送信</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supabase Realtime Manager モジュール -->
+  <script src="/src/supabaseRealtime.js"></script>
+  
+  <script>
+    // Supabase設定
+    const SUPABASE_URL = 'https://wzjasatwikzfwfnudxkm.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6amFzYXR3aWt6ZndmbnVkeGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxNTkwMzksImV4cCI6MjA4MDczNTAzOX0.YtUCl1dQc4JlBP4Nvkuki2UHtYCfe98I8uGrIQ0Ehic';
+
+    // URLからroomId取得
+    const roomId = window.location.pathname.split('/').pop();
+    document.getElementById('roomId').textContent = roomId;
+
+    // ユーザー情報の取得/生成
+    function getOrCreateUser() {
+      const key = 'anon-user';
+      const raw = localStorage.getItem(key);
+      if (raw) return JSON.parse(raw);
+      
+      const u = { 
+        id: uuid.v4(), 
+        name: `User-${Math.random().toString(36).slice(2, 7)}` 
+      };
+      localStorage.setItem(key, JSON.stringify(u));
+      return u;
+    }
+
+    const user = getOrCreateUser();
+    document.getElementById('userInfo').textContent = `あなた: ${user.name} (${user.id.slice(0, 6)})`;
+
+    // Supabaseリアルタイムマネージャー初期化
+    const realtimeManager = new SupabaseRealtimeManager({
+      url: SUPABASE_URL,
+      key: SUPABASE_ANON_KEY
+    });
+
+    // 状態管理
+    let cursors = {};
+    let allMessages = [];
+
+    // カーソル表示更新
+    function updateCursors() {
+      const canvas = document.getElementById('canvas');
+      canvas.querySelectorAll('.cursor').forEach(el => el.remove());
+
+      Object.entries(cursors).forEach(([id, cursor]) => {
+        const cursorEl = document.createElement('div');
+        cursorEl.className = 'cursor';
+        cursorEl.style.left = `${cursor.x * 100}%`;
+        cursorEl.style.top = `${cursor.y * 100}%`;
+        
+        cursorEl.innerHTML = `
+          <div class="cursor-label">${cursor.name}</div>
+          <div class="cursor-dot"></div>
+        `;
+        
+        canvas.appendChild(cursorEl);
+      });
+    }
+
+    // メッセージ表示
+    function displayMessages(messages) {
+      const messagesDiv = document.getElementById('messages');
+      
+      if (messages.length === 0) {
+        messagesDiv.innerHTML = `
+          <div style="text-align: center; color: #999; padding: 40px 20px;">
+            <div style="font-size: 48px; margin-bottom: 16px;">💭</div>
+            <div>メッセージはまだありません</div>
+            <div style="font-size: 12px; margin-top: 8px;">最初のメッセージを送信してみましょう</div>
+          </div>
+        `;
+        return;
+      }
+
+      messagesDiv.innerHTML = '';
+      messages.forEach(m => {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message';
+        
+        const time = new Date(m.created_at).toLocaleTimeString('ja-JP', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        });
+        
+        msgDiv.innerHTML = `
+          <div>
+            <strong>${m.name || m.user_id}</strong>
+            <span class="time">${time}</span>
+          </div>
+          <div class="content">${escapeHtml(m.content)}</div>
+        `;
+        
+        messagesDiv.appendChild(msgDiv);
+      });
+      
+      // 自動スクロール
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // HTMLエスケープ
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 参加者リスト更新
+    function updateMembers(members) {
+      const list = document.getElementById('membersList');
+      const count = document.getElementById('memberCount');
+      
+      list.innerHTML = '';
+      let memberCount = 0;
+      
+      Object.entries(members).forEach(([key, meta]) => {
+        if (meta && meta.length > 0) {
+          memberCount++;
+          const li = document.createElement('li');
+          const memberData = meta[0];
+          li.innerHTML = `
+            <span class="member-status"></span>
+            <strong>${memberData.name}</strong> 
+            <span style="color: #999; font-size: 12px;">(${memberData.user_id.slice(0, 6)})</span>
+          `;
+          list.appendChild(li);
+        }
+      });
+      
+      count.textContent = memberCount;
+    }
+
+    // イベントリスナー登録
+    realtimeManager.on('onMembersUpdate', (members) => {
+      console.log('参加者更新:', members);
+      updateMembers(members);
+    });
+
+    realtimeManager.on('onCursorUpdate', (cursor) => {
+      cursors[cursor.user_id] = cursor;
+      updateCursors();
+    });
+
+    realtimeManager.on('onMessageReceived', (message) => {
+      console.log('新しいメッセージ:', message);
+      allMessages.push(message);
+      displayMessages(allMessages);
+    });
+
+    realtimeManager.on('onMessagesLoaded', (messages) => {
+      console.log('初期メッセージ読み込み:', messages.length, '件');
+      allMessages = messages;
+      displayMessages(allMessages);
+    });
+
+    realtimeManager.on('onError', (error) => {
+      console.error('エラー:', error);
+      alert(`エラーが発生しました: ${error.error.message}`);
+    });
+
+    realtimeManager.on('onChannelStatus', (status) => {
+      console.log('チャンネル状態:', status);
+    });
+
+    // カーソル移動
+    document.getElementById('canvas').addEventListener('mousemove', (e) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      
+      realtimeManager.sendCursor(x, y);
+      
+      // ローカルカーソルも即座に更新
+      cursors[user.id] = { x, y, name: user.name };
+      updateCursors();
+    });
+
+    // メッセージ送信
+    async function sendMessage() {
+      const input = document.getElementById('messageInput');
+      const text = input.value.trim();
+      
+      if (!text) return;
+      
+      const result = await realtimeManager.sendMessage(text);
+      
+      if (result.success) {
+        input.value = '';
+        console.log('メッセージ送信成功');
+      } else {
+        console.error('メッセージ送信失敗:', result.error);
+      }
+    }
+
+    // Enterキーで送信
+    document.getElementById('messageInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+
+    // ルーム参加
+    console.log('🚀 ルームに参加中...');
+    realtimeManager.joinRoom(roomId, user).then(result => {
+      if (result.success) {
+        console.log('✅ ルーム参加成功');
+      } else {
+        console.error('❌ ルーム参加失敗:', result.error);
+      }
+    });
+
+    // クリーンアップ
+    window.addEventListener('beforeunload', () => {
+      realtimeManager.disconnect();
+    });
+  </script>
+</body>
+</html>
