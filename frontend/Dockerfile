@@ -1,12 +1,13 @@
 FROM node:20-alpine AS builder
-WORKDIR /flick-code
-COPY frontend-makecode/package*.json ./frontend-makecode/
-RUN cd frontend-makecode && npm install
-COPY frontend-makecode ./frontend-makecode
-RUN cd frontend-makecode && npm run build
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
 FROM node:20-alpine
 WORKDIR /app
 RUN npm install -g serve
-COPY --from=builder /flick-code/frontend-makecode/dist ./dist
+COPY --from=builder /app/frontend/dist ./dist
 EXPOSE 3000
 CMD ["serve", "-s", "dist", "-l", "3000"]

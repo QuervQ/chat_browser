@@ -1,3 +1,12 @@
-node_modules
-.env
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
 .history
+.venv
+.env
+node_modules
+node_modules/
+vite.config.ts
