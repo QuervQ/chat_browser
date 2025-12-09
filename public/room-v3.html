@@ -266,9 +266,8 @@
         const SUPABASE_URL = 'YOUR_SUPABASE_URL';
         const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
         
-        // URLからルームIDを取得（URLパラメータまたはパスから）
-        const urlParams = new URLSearchParams(window.location.search);
-        const roomId = urlParams.get('room') || window.location.pathname.split('/room/')[1] || 'default-room';
+        // URLからルームIDを取得
+        const roomId = window.location.pathname.split('/room/')[1] || 'default-room';
         
         let supabase;
         let myUserId;
@@ -301,7 +300,13 @@
 
         function initializeSupabase() {
             // Supabaseクライアントの初期化
+            console.log('🔧 Supabase初期化中...');
+            console.log('URL:', SUPABASE_URL);
+            console.log('Key:', SUPABASE_ANON_KEY.substring(0, 20) + '...');
+            console.log('Room ID:', roomId);
+            
             supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('✅ Supabaseクライアント作成完了');
             
             // カーソルチャンネル
             cursorChannel = supabase.channel(`cursor:${roomId}`, {
@@ -332,20 +337,65 @@
                     }
                 });
 
-            // チャットチャンネル（ブロードキャスト専用）
-            chatChannel = supabase.channel(`chat:${roomId}`, {
-                config: {
-                    broadcast: { self: true }
-                }
-            });
-            
-            chatChannel
-                .on('broadcast', { event: 'message' }, ({ payload }) => {
-                    displayMessage(payload);
-                })
-                .subscribe();
+            // チャットチャンネル（データベースの変更を監視）
+            console.log('💬 チャットチャンネル設定中...');
+            chatChannel = supabase
+                .channel(`chat:${roomId}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `room_id=eq.${roomId}`
+                    },
+                    (payload) => {
+                        console.log('📩 新しいメッセージを受信:', payload);
+                        displayMessage({
+                            user: payload.new.username,
+                            userId: payload.new.user_id,
+                            text: payload.new.message,
+                        });
+                    }
+                )
+                .subscribe((status) => {
+                    console.log('💬 チャットチャンネル状態:', status);
+                });
+
+            // 既存のメッセージを読み込む
+            loadMessages();
 
             setupEventListeners();
+        }
+
+        async function loadMessages() {
+            console.log('📚 既存メッセージを読み込み中...');
+            try {
+                const { data, error } = await supabase
+                    .from('messages')
+                    .select('*')
+                    .eq('room_id', roomId)
+                    .order('created_at', { ascending: true })
+                    .limit(50);
+
+                if (error) {
+                    console.error('❌ メッセージ読み込みエラー:', error);
+                    return;
+                }
+
+                console.log('✅ メッセージ取得成功:', data?.length || 0, '件');
+                if (data && data.length > 0) {
+                    data.forEach(msg => {
+                        displayMessage({
+                            user: msg.username,
+                            userId: msg.user_id,
+                            text: msg.message,
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error('❌ メッセージ読み込み中のエラー:', error);
+            }
         }
 
         function setupEventListeners() {
@@ -402,24 +452,51 @@
             }
         }
 
-        function sendMessage() {
+        async function sendMessage() {
             const input = document.getElementById('message-input');
             const message = input.value.trim();
             
-            if (!message) return;
+            if (!message) {
+                console.log('⚠️ メッセージが空です');
+                return;
+            }
             
-            // ブロードキャストメッセージを送信
-            chatChannel.send({
-                type: 'broadcast',
-                event: 'message',
-                payload: {
-                    user: myUsername,
-                    userId: myUserId,
-                    text: message,
-                },
+            console.log('📤 メッセージ送信中...', message);
+            console.log('送信データ:', {
+                room_id: roomId,
+                user_id: myUserId,
+                username: myUsername,
+                message: message
             });
             
-            input.value = '';
+            try {
+                // Supabaseデータベースにメッセージを保存
+                const { data, error } = await supabase
+                    .from('messages')
+                    .insert([
+                        {
+                            room_id: roomId,
+                            user_id: myUserId,
+                            username: myUsername,
+                            message: message,
+                            created_at: new Date().toISOString(),
+                        }
+                    ])
+                    .select();
+                
+                if (error) {
+                    console.error('❌ メッセージ送信エラー:', error);
+                    console.error('エラー詳細:', JSON.stringify(error, null, 2));
+                    alert(`メッセージの送信に失敗しました: ${error.message}`);
+                    return;
+                }
+                
+                console.log('✅ メッセージ送信成功:', data);
+                input.value = '';
+            } catch (error) {
+                console.error('❌ 送信中のエラー:', error);
+                alert('メッセージの送信に失敗しました');
+            }
         }
 
         function displayMessage(data) {
