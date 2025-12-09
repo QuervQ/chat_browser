@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>リアルタイム カーソル & チャット</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            position: relative;
+        }
+
+        #cursor-area {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            cursor: crosshair;
+        }
+
+        .cursor {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            pointer-events: none;
+            transition: all 0.1s ease;
+            z-index: 1000;
+        }
+
+        .cursor::after {
+            content: attr(data-user);
+            position: absolute;
+            left: 25px;
+            top: -5px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        #chat-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 350px;
+            height: 500px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(10px);
+            z-index: 2000;
+        }
+
+        #chat-header {
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px 12px 0 0;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #online-count {
+            font-size: 12px;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px 8px;
+            border-radius: 12px;
+        }
+
+        #messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message {
+            background: #f0f0f0;
+            padding: 10px 12px;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.own {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            align-self: flex-end;
+        }
+
+        .message-user {
+            font-weight: bold;
+            margin-bottom: 4px;
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .message-text {
+            font-size: 14px;
+        }
+
+        #input-container {
+            padding: 16px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 8px;
+        }
+
+        #message-input {
+            flex: 1;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        #message-input:focus {
+            border-color: #667eea;
+        }
+
+        #send-button {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+
+        #send-button:hover {
+            transform: scale(1.05);
+        }
+
+        #send-button:active {
+            transform: scale(0.95);
+        }
+
+        #welcome-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        }
+
+        #welcome-box {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+        }
+
+        #welcome-box h1 {
+            margin-bottom: 20px;
+            color: #667eea;
+        }
+
+        #welcome-box p {
+            margin-bottom: 24px;
+            color: #666;
+        }
+
+        #username-input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        #username-input:focus {
+            border-color: #667eea;
+        }
+
+        #join-button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        #join-button:hover {
+            transform: scale(1.02);
+        }
+
+        #join-button:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body>
+    <div id="welcome-screen">
+        <div id="welcome-box">
+            <h1>🎨 リアルタイム ルーム</h1>
+            <p>カーソルの動きをシェアして、チャットで会話しよう！</p>
+            <input type="text" id="username-input" placeholder="ユーザー名を入力" maxlength="20">
+            <button id="join-button">参加する</button>
+        </div>
+    </div>
+
+    <div id="cursor-area"></div>
+
+    <div id="chat-container">
+        <div id="chat-header">
+            <span>💬 チャット</span>
+            <span id="online-count">👤 0人</span>
+        </div>
+        <div id="messages"></div>
+        <div id="input-container">
+            <input type="text" id="message-input" placeholder="メッセージを入力..." maxlength="200">
+            <button id="send-button">送信</button>
+        </div>
+    </div>
+
+    <script>
+        // Supabaseの設定（環境変数から読み込むか、ここに直接設定）
+        const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+        
+        // URLからルームIDを取得
+        const roomId = window.location.pathname.split('/room/')[1] || 'default-room';
+        
+        let supabase;
+        let myUserId;
+        let myUsername;
+        let cursorChannel;
+        let chatChannel;
+        const cursors = new Map();
+        const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'];
+
+        // ユーザー名入力と参加
+        document.getElementById('join-button').addEventListener('click', joinRoom);
+        document.getElementById('username-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') joinRoom();
+        });
+
+        async function joinRoom() {
+            const username = document.getElementById('username-input').value.trim();
+            if (!username) {
+                alert('ユーザー名を入力してください');
+                return;
+            }
+
+            myUsername = username;
+            myUserId = 'user_' + Math.random().toString(36).substr(2, 9);
+            
+            document.getElementById('welcome-screen').style.display = 'none';
+            
+            initializeSupabase();
+        }
+
+        function initializeSupabase() {
+            // Supabaseクライアントの初期化
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            
+            // カーソルチャンネル
+            cursorChannel = supabase.channel(`cursor:${roomId}`, {
+                config: {
+                    presence: {
+                        key: myUserId,
+                    },
+                },
+            });
+
+            cursorChannel
+                .on('presence', { event: 'sync' }, () => {
+                    const state = cursorChannel.presenceState();
+                    updateCursors(state);
+                    updateOnlineCount(Object.keys(state).length);
+                })
+                .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+                    console.log('User joined:', key);
+                })
+                .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+                    console.log('User left:', key);
+                    removeCursor(key);
+                })
+                .subscribe(async (status) => {
+                    if (status === 'SUBSCRIBED') {
+                        await cursorChannel.track({
+                            user: myUsername,
+                            x: 0,
+                            y: 0,
+                            color: getRandomColor(),
+                        });
+                    }
+                });
+
+            // チャットチャンネル
+            chatChannel = supabase.channel(`chat:${roomId}`);
+            
+            chatChannel
+                .on('broadcast', { event: 'message' }, ({ payload }) => {
+                    displayMessage(payload);
+                })
+                .subscribe();
+
+            setupEventListeners();
+        }
+
+        function setupEventListeners() {
+            // カーソル移動
+            document.getElementById('cursor-area').addEventListener('mousemove', async (e) => {
+                const x = e.clientX;
+                const y = e.clientY;
+                
+                await cursorChannel.track({
+                    user: myUsername,
+                    x: x,
+                    y: y,
+                    color: cursors.get(myUserId)?.color || getRandomColor(),
+                });
+            });
+
+            // チャット送信
+            document.getElementById('send-button').addEventListener('click', sendMessage);
+            document.getElementById('message-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+        }
+
+        function updateCursors(state) {
+            Object.entries(state).forEach(([userId, presence]) => {
+                if (userId !== myUserId && presence[0]) {
+                    const data = presence[0];
+                    updateCursor(userId, data.user, data.x, data.y, data.color);
+                }
+            });
+        }
+
+        function updateCursor(userId, username, x, y, color) {
+            let cursorEl = cursors.get(userId);
+            
+            if (!cursorEl) {
+                cursorEl = document.createElement('div');
+                cursorEl.className = 'cursor';
+                cursorEl.style.backgroundColor = color;
+                cursorEl.setAttribute('data-user', username);
+                document.getElementById('cursor-area').appendChild(cursorEl);
+                cursors.set(userId, cursorEl);
+            }
+            
+            cursorEl.style.left = x + 'px';
+            cursorEl.style.top = y + 'px';
+        }
+
+        function removeCursor(userId) {
+            const cursorEl = cursors.get(userId);
+            if (cursorEl) {
+                cursorEl.remove();
+                cursors.delete(userId);
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            await chatChannel.send({
+                type: 'broadcast',
+                event: 'message',
+                payload: {
+                    user: myUsername,
+                    userId: myUserId,
+                    text: message,
+                    timestamp: Date.now(),
+                },
+            });
+            
+            input.value = '';
+        }
+
+        function displayMessage(data) {
+            const messagesDiv = document.getElementById('messages');
+            const messageEl = document.createElement('div');
+            messageEl.className = 'message' + (data.userId === myUserId ? ' own' : '');
+            
+            const userEl = document.createElement('div');
+            userEl.className = 'message-user';
+            userEl.textContent = data.user;
+            
+            const textEl = document.createElement('div');
+            textEl.className = 'message-text';
+            textEl.textContent = data.text;
+            
+            messageEl.appendChild(userEl);
+            messageEl.appendChild(textEl);
+            messagesDiv.appendChild(messageEl);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function updateOnlineCount(count) {
+            document.getElementById('online-count').textContent = `👤 ${count}人`;
+        }
+
+        function getRandomColor() {
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+    </script>
+</body>
+</html>
