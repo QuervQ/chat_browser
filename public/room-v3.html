@@ -262,7 +262,7 @@
     </div>
 
     <script>
-        // Supabaseの設定（環境変数から読み込むか、ここに直接設定）
+        // Supabaseの設定（サーバーサイドで環境変数から注入されます）
         const SUPABASE_URL = 'YOUR_SUPABASE_URL';
         const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
         
@@ -317,11 +317,7 @@
                     updateCursors(state);
                     updateOnlineCount(Object.keys(state).length);
                 })
-                .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-                    console.log('User joined:', key);
-                })
                 .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-                    console.log('User left:', key);
                     removeCursor(key);
                 })
                 .subscribe(async (status) => {
@@ -335,8 +331,12 @@
                     }
                 });
 
-            // チャットチャンネル
-            chatChannel = supabase.channel(`chat:${roomId}`);
+            // チャットチャンネル（ブロードキャスト専用）
+            chatChannel = supabase.channel(`chat:${roomId}`, {
+                config: {
+                    broadcast: { self: true }
+                }
+            });
             
             chatChannel
                 .on('broadcast', { event: 'message' }, ({ payload }) => {
@@ -401,20 +401,20 @@
             }
         }
 
-        async function sendMessage() {
+        function sendMessage() {
             const input = document.getElementById('message-input');
             const message = input.value.trim();
             
             if (!message) return;
             
-            await chatChannel.send({
+            // ブロードキャストメッセージを送信
+            chatChannel.send({
                 type: 'broadcast',
                 event: 'message',
                 payload: {
                     user: myUsername,
                     userId: myUserId,
                     text: message,
-                    timestamp: Date.now(),
                 },
             });
             
