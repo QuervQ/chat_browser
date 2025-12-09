@@ -3,7 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>リアルタイム カーソル & チャット</title>
+    <title>リアルタイム ルーム</title>
+    <script>
+        // URLルーティング処理
+        const path = window.location.pathname;
+        const roomMatch = path.match(/\/room\/(.+)/);
+        
+        if (roomMatch) {
+            // /room/{id} の場合、room-v3.htmlにリダイレクト
+            window.location.href = '/room-v3.html?room=' + roomMatch[1];
+        }
+    </script>
     <style>
         * {
             margin: 0;

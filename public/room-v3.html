@@ -266,8 +266,9 @@
         const SUPABASE_URL = 'YOUR_SUPABASE_URL';
         const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
         
-        // URLからルームIDを取得
-        const roomId = window.location.pathname.split('/room/')[1] || 'default-room';
+        // URLからルームIDを取得（URLパラメータまたはパスから）
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room') || window.location.pathname.split('/room/')[1] || 'default-room';
         
         let supabase;
         let myUserId;
