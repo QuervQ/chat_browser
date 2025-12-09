@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './index.css';
+import WebSiteRender from './serach_system/site_rendering.jsx';
 
 function App() {
     const [tabs, setTabs] = useState([
@@ -7,11 +8,28 @@ function App() {
     ]);
     const [activeTabId, setActiveTabId] = useState(1);
     const [nextId, setNextId] = useState(2);
+    const [windowSize, setWindowSize] = useState({
+        width: window.innerWidth,
+        height: window.innerHeight
+    });
+
+    // ウィンドウサイズの変更を監視
+    useEffect(() => {
+        const handleResize = () => {
+            setWindowSize({
+                width: window.innerWidth,
+                height: window.innerHeight
+            });
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     const addTab = () => {
         const newTab = {
             id: nextId,
-            url: 'https://example.com',
+            url: 'https://google.com',
             title: 'New Tab'
         };
         setTabs([...tabs, newTab]);
@@ -36,9 +54,13 @@ function App() {
 
     const activeTab = tabs.find(tab => tab.id === activeTabId);
 
+    const TAB_BAR_HEIGHT = 40;
+    const ADDRESS_BAR_HEIGHT = 50;
+    const UI_HEIGHT = TAB_BAR_HEIGHT + ADDRESS_BAR_HEIGHT;
+
     return (
         <div className="browser">
-            <div className="tab-bar">
+            <div className="tab-bar" style={{ height: `${TAB_BAR_HEIGHT}px` }}>
                 {tabs.map(tab => (
                     <div
                         key={tab.id}
@@ -60,27 +82,31 @@ function App() {
                 <button className="tab-new" onClick={addTab}>+</button>
             </div>
 
-            <div className="address-bar">
+            <div className="address-bar" style={{ height: `${ADDRESS_BAR_HEIGHT}px` }}>
                 <input
                     type="text"
                     value={activeTab?.url || ''}
                     onChange={(e) => updateTabUrl(activeTabId, e.target.value)}
-                    placeholder="URLを入力..."
+                    onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                            e.target.blur();
+                        }
+                    }}
+                    placeholder="URLを入力してEnterキー..."
                 />
             </div>
 
             <div className="content">
                 {tabs.map(tab => (
-                    <div
+                    <WebSiteRender
                         key={tab.id}
-                        className={`webview ${tab.id === activeTabId ? 'active' : ''}`}
-                    >
-                        <iframe
-                            src={tab.url}
-                            title={tab.title}
-                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                        />
-                    </div>
+                        url={tab.url}
+                        x={0}
+                        y={UI_HEIGHT}
+                        width={windowSize.width}
+                        height={windowSize.height - UI_HEIGHT}
+                        isActive={tab.id === activeTabId}
+                    />
                 ))}
             </div>
         </div>
