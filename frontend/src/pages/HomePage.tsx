@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Link } from 'react-router-dom'
 
 export default function HomePage() {
     useEffect(() => {
@@ -30,9 +31,9 @@ export default function HomePage() {
                 }}>
                     Synapse
                 </h1>
-                <p style={{ fontSize: '1.2em', marginBottom: '40px', color: '#858585' }}>
-                    main pages
-                </p>
+                <Link to="/chat" className="btn-primary">
+                    チャットルームに入る
+                </Link>
             </div>
         </div>
     )
