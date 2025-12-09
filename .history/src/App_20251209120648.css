@@ -1,0 +1,96 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.browser {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f0f0f0;
+}
+
+.tab-bar {
+  display: flex;
+  background-color: #e0e0e0;
+  border-bottom: 1px solid #ccc;
+  padding: 0;
+  gap: 2px;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #d0d0d0;
+  cursor: pointer;
+  min-width: 150px;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.tab.active {
+  background-color: #fff;
+}
+
+.tab-title {
+  flex: 1;
+  font-size: 13px;
+}
+
+.tab-close {
+  margin-left: 8px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.tab-new {
+  padding: 8px 16px;
+  background-color: #e0e0e0;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.address-bar {
+  padding: 8px;
+  background-color: #fff;
+  border-bottom: 1px solid #ccc;
+}
+
+.address-bar input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 20px;
+  font-size: 14px;
+}
+
+.content {
+  flex: 1;
+  position: relative;
+  background-color: #fff;
+}
+
+.webview {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+}
+
+.webview.active {
+  display: block;
+}
+
+.webview iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
