@@ -2,23 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 
 interface WebSiteRenderProps {
     url: string;
-    x?: number;
-    y?: number;
     width?: number | string;
     height?: number | string;
     isActive?: boolean;
     className?: string;
 }
 
-declare global {
-    namespace JSX {
-        interface IntrinsicElements {
-            webview: React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & { src?: string; autosize?: string; allowpopups?: string }, HTMLElement>;
-        }
-    }
-}
-
-export function WebSiteRender({ url, x = 0, y = 100, width = 800, height = 600, isActive = true, className }: WebSiteRenderProps) {
+export function WebSiteRender({ url, width = 800, height = 600, isActive = true, className }: WebSiteRenderProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const webviewRef = useRef<any>(null); // Type check for webview element is tricky in React
@@ -71,7 +61,7 @@ export function WebSiteRender({ url, x = 0, y = 100, width = 800, height = 600, 
                 ref={webviewRef}
                 src={finalUrl}
                 style={{ width: '100%', height: '100%', display: 'inline-flex' }}
-                allowpopups="true"
+                allowpopups={true}
             />
 
             {isLoading && (

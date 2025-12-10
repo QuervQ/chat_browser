@@ -21,8 +21,7 @@ function createWindow() {
     win = new BrowserWindow({
         width: 1200,
         height: 800,
-        icon: path.join('/Users/yuuto/learn_lab/chat_browser/frontend/public/images/favicon.ico'),
-        // icon: path.join(process.env.VITE_PUBLIC || '', 'images/icon-mini.png'),
+        icon: path.join(process.env.VITE_PUBLIC || '', 'images/favicon.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.mjs'),
             // Security: Enable contextIsolation and disable nodeIntegration
