@@ -19,7 +19,10 @@ let win: BrowserWindow | null
 
 function createWindow() {
     win = new BrowserWindow({
-        icon: path.join(process.env.VITE_PUBLIC || '', 'electron-vite.svg'),
+        width: 1200,
+        height: 800,
+        icon: path.join('/Users/yuuto/learn_lab/chat_browser/frontend/public/images/favicon.ico'),
+        // icon: path.join(process.env.VITE_PUBLIC || '', 'images/icon-mini.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.mjs'),
             // Security: Enable contextIsolation and disable nodeIntegration
@@ -28,30 +31,59 @@ function createWindow() {
             webviewTag: true,
         },
     })
-
+    console.log(process.env.VITE_PUBLIC)
     // Test active push message to Renderer-process.
     win.webContents.on('did-finish-load', () => {
         win?.webContents.send('main-process-message', (new Date).toLocaleString())
     })
 
     if (VITE_DEV_SERVER_URL) {
-        win.loadURL(VITE_DEV_SERVER_URL)
+        console.log('Loading dev server:', VITE_DEV_SERVER_URL)
+        win.loadURL(VITE_DEV_SERVER_URL).catch(err => {
+            console.error('Failed to load URL:', err)
+        })
     } else {
-        // win.loadFile('dist/index.html')
-        win.loadFile(path.join(RENDERER_DIST, 'index.html'))
+        console.log('Loading file:', path.join(RENDERER_DIST, 'index.html'))
+        win.loadFile(path.join(RENDERER_DIST, 'index.html')).catch(err => {
+            console.error('Failed to load file:', err)
+        })
+    }
+
+    // Open DevTools in development
+    if (VITE_DEV_SERVER_URL) {
+        win.webContents.openDevTools()
     }
 }
 
 app.on('window-all-closed', () => {
+    console.log('All windows closed')
     if (process.platform !== 'darwin') {
         app.quit()
     }
 })
 
 app.on('activate', () => {
+    console.log('App activated')
     if (BrowserWindow.getAllWindows().length === 0) {
         createWindow()
     }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady()
+    .then(() => {
+        console.log('App is ready, creating window...')
+        createWindow()
+    })
+    .catch(err => {
+        console.error('App failed to start:', err)
+        process.exit(1)
+    })
+
+// Catch unhandled errors
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught exception:', error)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled rejection at:', promise, 'reason:', reason)
+})
