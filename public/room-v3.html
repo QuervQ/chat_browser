@@ -33,8 +33,8 @@
             height: 20px;
             border-radius: 50%;
             pointer-events: none;
-            transition: all 0.1s ease;
             z-index: 1000;
+            will-change: transform;
         }
 
         .cursor::after {
@@ -276,6 +276,8 @@
         let cursorChannel;
         let chatChannel;
         const cursors = new Map();
+        const cursorData = new Map(); // カーソルの補間データを保持
+        const lastPositions = new Map(); // 最後に受信した位置を記録
         const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'];
 
         // ユーザー名入力と参加
@@ -305,37 +307,60 @@
             supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
             
-            // カーソルチャンネル
+            // カーソルチャンネル（presenceとbroadcastの両方を使用）
             cursorChannel = supabase.channel(`cursor:${roomId}`, {
                 config: {
                     presence: {
                         key: myUserId,
                     },
+                    broadcast: {
+                        self: false, // 自分のbroadcastは受信しない
+                    },
                 },
             });
 
+            // 自分の色を固定
+            myColor = getRandomColor();
+
             cursorChannel
+                // presence: オンライン人数管理用
                 .on('presence', { event: 'sync' }, () => {
                     const state = cursorChannel.presenceState();
-                    updateCursors(state);
                     updateOnlineCount(Object.keys(state).length);
                 })
+                .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+                    // ユーザー参加
+                })
                 .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+                    // ユーザー退出
                     removeCursor(key);
+                })
+                // broadcast: リアルタイムカーソル位置用（高速）
+                .on('broadcast', { event: 'cursor-move' }, ({ payload }) => {
+                    if (payload.userId !== myUserId) {
+                        const lastPos = lastPositions.get(payload.userId);
+                        if (!lastPos || lastPos.xRatio !== payload.xRatio || lastPos.yRatio !== payload.yRatio) {
+                            lastPositions.set(payload.userId, { 
+                                xRatio: payload.xRatio, 
+                                yRatio: payload.yRatio 
+                            });
+                            requestAnimationFrame(() => {
+                                updateCursor(payload.userId, payload.user, payload.xRatio, payload.yRatio, payload.color);
+                            });
+                        }
+                    }
                 })
                 .subscribe(async (status) => {
                     if (status === 'SUBSCRIBED') {
+                        // presence登録（オンライン状態管理用）
                         await cursorChannel.track({
                             user: myUsername,
-                            xRatio: 0.5,  // 初期位置は画面中央
-                            yRatio: 0.5,
-                            color: getRandomColor(),
+                            online: true,
                         });
                     }
                 });
 
             // チャットチャンネル（データベースの変更を監視）
-            console.log('💬 チャットチャンネル設定中...');
             chatChannel = supabase
                 .channel(`chat:${roomId}`)
                 .on(
@@ -347,7 +372,6 @@
                         filter: `room_id=eq.${roomId}`
                     },
                     (payload) => {
-                        console.log('📩 新しいメッセージを受信:', payload);
                         displayMessage({
                             user: payload.new.username,
                             userId: payload.new.user_id,
@@ -355,18 +379,18 @@
                         });
                     }
                 )
-                .subscribe((status) => {
-                    console.log('💬 チャットチャンネル状態:', status);
-                });
+                .subscribe();
 
             // 既存のメッセージを読み込む
             loadMessages();
 
             setupEventListeners();
+            
+            // カーソル補間アニメーションループ
+            startCursorInterpolation();
         }
 
         async function loadMessages() {
-            console.log('📚 既存メッセージを読み込み中...');
             try {
                 const { data, error } = await supabase
                     .from('messages')
@@ -376,11 +400,9 @@
                     .limit(50);
 
                 if (error) {
-                    console.error('❌ メッセージ読み込みエラー:', error);
                     return;
                 }
 
-                console.log('✅ メッセージ取得成功:', data?.length || 0, '件');
                 if (data && data.length > 0) {
                     data.forEach(msg => {
                         displayMessage({
@@ -391,19 +413,19 @@
                     });
                 }
             } catch (error) {
-                console.error('❌ メッセージ読み込み中のエラー:', error);
+                // エラーハンドリング
             }
         }
 
         function setupEventListeners() {
             let lastUpdate = 0;
-            const UPDATE_INTERVAL = 50; // 50ms (1秒間に20回更新)
+            const UPDATE_INTERVAL = 16; // 16ms (60fps)
             
             // カーソル移動（スロットリング付き）
-            document.getElementById('cursor-area').addEventListener('mousemove', async (e) => {
+            document.getElementById('cursor-area').addEventListener('mousemove', (e) => {
                 const now = Date.now();
                 
-                // 前回の更新から50ms以上経過していない場合はスキップ
+                // スロットリング: UPDATE_INTERVAL以内の更新はスキップ
                 if (now - lastUpdate < UPDATE_INTERVAL) {
                     return;
                 }
@@ -418,12 +440,17 @@
                 const xRatio = e.clientX / viewportWidth;
                 const yRatio = e.clientY / viewportHeight;
                 
-                // awaitを削除してノンブロッキングに
-                cursorChannel.track({
-                    user: myUsername,
-                    xRatio: xRatio,
-                    yRatio: yRatio,
-                    color: cursors.get(myUserId)?.color || getRandomColor(),
+                // broadcastでカーソル位置を送信（高速）
+                cursorChannel.send({
+                    type: 'broadcast',
+                    event: 'cursor-move',
+                    payload: {
+                        userId: myUserId,
+                        user: myUsername,
+                        xRatio: xRatio,
+                        yRatio: yRatio,
+                        color: myColor,
+                    }
                 });
             });
 
@@ -438,31 +465,132 @@
             Object.entries(state).forEach(([userId, presence]) => {
                 if (userId !== myUserId && presence[0]) {
                     const data = presence[0];
-                    updateCursor(userId, data.user, data.xRatio, data.yRatio, data.color);
+                    const lastPos = lastPositions.get(userId);
+                    
+                    // 位置が変わった場合のみ更新（補間の途中リセットを防ぐ）
+                    if (!lastPos || lastPos.xRatio !== data.xRatio || lastPos.yRatio !== data.yRatio) {
+                        lastPositions.set(userId, { xRatio: data.xRatio, yRatio: data.yRatio });
+                        
+                        // requestAnimationFrameで次のフレームで更新を保証
+                        requestAnimationFrame(() => {
+                            updateCursor(userId, data.user, data.xRatio, data.yRatio, data.color);
+                        });
+                    }
                 }
             });
         }
 
+        // イージング関数（ease-out）
+        function easeOutCubic(t) {
+            return 1 - Math.pow(1 - t, 3);
+        }
+
         function updateCursor(userId, username, xRatio, yRatio, color) {
             let cursorEl = cursors.get(userId);
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const targetX = xRatio * viewportWidth;
+            const targetY = yRatio * viewportHeight;
             
             if (!cursorEl) {
+                // 新しいカーソルを作成
                 cursorEl = document.createElement('div');
                 cursorEl.className = 'cursor';
                 cursorEl.style.backgroundColor = color;
                 cursorEl.setAttribute('data-user', username);
                 document.getElementById('cursor-area').appendChild(cursorEl);
                 cursors.set(userId, cursorEl);
+                
+                // 初期位置を設定
+                cursorData.set(userId, {
+                    currentX: targetX,
+                    currentY: targetY,
+                    targetX: targetX,
+                    targetY: targetY,
+                    startX: targetX,
+                    startY: targetY,
+                    progress: 1,
+                    timestamp: Date.now()
+                });
+                
+                cursorEl.style.transform = `translate(${targetX}px, ${targetY}px)`;
+            } else {
+                // 既存のカーソルを更新
+                const data = cursorData.get(userId);
+                if (data) {
+                    // 新しいターゲット位置を設定
+                    data.startX = data.currentX;
+                    data.startY = data.currentY;
+                    data.targetX = targetX;
+                    data.targetY = targetY;
+                    data.progress = 0;
+                    data.timestamp = Date.now();
+                } else {
+                    // データが存在しない場合は初期化
+                    cursorData.set(userId, {
+                        currentX: targetX,
+                        currentY: targetY,
+                        targetX: targetX,
+                        targetY: targetY,
+                        startX: targetX,
+                        startY: targetY,
+                        progress: 1,
+                        timestamp: Date.now()
+                    });
+                }
+            }
+        }
+
+        // カーソル補間アニメーションループ
+        function startCursorInterpolation() {
+            const INTERPOLATION_DURATION = 100; // 100ms で補間
+            
+            function animate() {
+                const now = Date.now();
+                
+                cursorData.forEach((data, userId) => {
+                    const cursorEl = cursors.get(userId);
+                    if (!cursorEl) return;
+                    
+                    // 経過時間を計算
+                    const elapsed = now - data.timestamp;
+                    data.progress = Math.min(elapsed / INTERPOLATION_DURATION, 1);
+                    
+                    // イージング関数を適用
+                    const eased = easeOutCubic(data.progress);
+                    
+                    // 扇形補間（円弧を描くように補間）
+                    const dx = data.targetX - data.startX;
+                    const dy = data.targetY - data.startY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance > 5) {
+                        // 距離が大きい場合は扇形補間
+                        // 中間点を少し持ち上げて円弧を描く
+                        const midProgress = eased;
+                        const arcHeight = distance * 0.15 * Math.sin(midProgress * Math.PI);
+                        
+                        // 法線方向（進行方向に対して垂直）
+                        const normalX = -dy / distance;
+                        const normalY = dx / distance;
+                        
+                        // 線形補間 + 円弧オフセット
+                        data.currentX = data.startX + dx * midProgress + normalX * arcHeight;
+                        data.currentY = data.startY + dy * midProgress + normalY * arcHeight;
+                    } else {
+                        // 距離が小さい場合は線形補間
+                        data.currentX = data.startX + dx * eased;
+                        data.currentY = data.startY + dy * eased;
+                    }
+                    
+                    // カーソル位置を更新
+                    cursorEl.style.transform = `translate(${data.currentX}px, ${data.currentY}px)`;
+                });
+                
+                requestAnimationFrame(animate);
             }
             
-            // 比率から実際のピクセル位置を計算
-            const viewportWidth = window.innerWidth;
-            const viewportHeight = window.innerHeight;
-            const x = xRatio * viewportWidth;
-            const y = yRatio * viewportHeight;
-            
-            cursorEl.style.left = x + 'px';
-            cursorEl.style.top = y + 'px';
+            animate();
         }
 
         function removeCursor(userId) {
@@ -470,6 +598,7 @@
             if (cursorEl) {
                 cursorEl.remove();
                 cursors.delete(userId);
+                cursorData.delete(userId); // 補間データも削除
             }
         }
 
@@ -478,17 +607,8 @@
             const message = input.value.trim();
             
             if (!message) {
-                console.log('⚠️ メッセージが空です');
                 return;
             }
-            
-            console.log('📤 メッセージ送信中...', message);
-            console.log('送信データ:', {
-                room_id: roomId,
-                user_id: myUserId,
-                username: myUsername,
-                message: message
-            });
             
             try {
                 // Supabaseデータベースにメッセージを保存
@@ -506,16 +626,12 @@
                     .select();
                 
                 if (error) {
-                    console.error('❌ メッセージ送信エラー:', error);
-                    console.error('エラー詳細:', JSON.stringify(error, null, 2));
                     alert(`メッセージの送信に失敗しました: ${error.message}`);
                     return;
                 }
                 
-                console.log('✅ メッセージ送信成功:', data);
                 input.value = '';
             } catch (error) {
-                console.error('❌ 送信中のエラー:', error);
                 alert('メッセージの送信に失敗しました');
             }
         }
