@@ -272,6 +272,7 @@
         let supabase;
         let myUserId;
         let myUsername;
+        let myColor;  // 自分の色を保持
         let cursorChannel;
         let chatChannel;
         const cursors = new Map();
@@ -300,13 +301,9 @@
 
         function initializeSupabase() {
             // Supabaseクライアントの初期化
-            console.log('🔧 Supabase初期化中...');
-            console.log('URL:', SUPABASE_URL);
-            console.log('Key:', SUPABASE_ANON_KEY.substring(0, 20) + '...');
-            console.log('Room ID:', roomId);
             
             supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            console.log('✅ Supabaseクライアント作成完了');
+        
             
             // カーソルチャンネル
             cursorChannel = supabase.channel(`cursor:${roomId}`, {
@@ -330,8 +327,8 @@
                     if (status === 'SUBSCRIBED') {
                         await cursorChannel.track({
                             user: myUsername,
-                            x: 0,
-                            y: 0,
+                            xRatio: 0.5,  // 初期位置は画面中央
+                            yRatio: 0.5,
                             color: getRandomColor(),
                         });
                     }
@@ -399,15 +396,33 @@
         }
 
         function setupEventListeners() {
-            // カーソル移動
+            let lastUpdate = 0;
+            const UPDATE_INTERVAL = 50; // 50ms (1秒間に20回更新)
+            
+            // カーソル移動（スロットリング付き）
             document.getElementById('cursor-area').addEventListener('mousemove', async (e) => {
-                const x = e.clientX;
-                const y = e.clientY;
+                const now = Date.now();
                 
-                await cursorChannel.track({
+                // 前回の更新から50ms以上経過していない場合はスキップ
+                if (now - lastUpdate < UPDATE_INTERVAL) {
+                    return;
+                }
+                
+                lastUpdate = now;
+                
+                // ビューポートサイズを取得
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                
+                // 位置を比率(0-1)で計算
+                const xRatio = e.clientX / viewportWidth;
+                const yRatio = e.clientY / viewportHeight;
+                
+                // awaitを削除してノンブロッキングに
+                cursorChannel.track({
                     user: myUsername,
-                    x: x,
-                    y: y,
+                    xRatio: xRatio,
+                    yRatio: yRatio,
                     color: cursors.get(myUserId)?.color || getRandomColor(),
                 });
             });
@@ -423,12 +438,12 @@
             Object.entries(state).forEach(([userId, presence]) => {
                 if (userId !== myUserId && presence[0]) {
                     const data = presence[0];
-                    updateCursor(userId, data.user, data.x, data.y, data.color);
+                    updateCursor(userId, data.user, data.xRatio, data.yRatio, data.color);
                 }
             });
         }
 
-        function updateCursor(userId, username, x, y, color) {
+        function updateCursor(userId, username, xRatio, yRatio, color) {
             let cursorEl = cursors.get(userId);
             
             if (!cursorEl) {
@@ -439,6 +454,12 @@
                 document.getElementById('cursor-area').appendChild(cursorEl);
                 cursors.set(userId, cursorEl);
             }
+            
+            // 比率から実際のピクセル位置を計算
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const x = xRatio * viewportWidth;
+            const y = yRatio * viewportHeight;
             
             cursorEl.style.left = x + 'px';
             cursorEl.style.top = y + 'px';
