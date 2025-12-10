@@ -31,8 +31,11 @@ export default function HomePage() {
                 }}>
                     Synapse
                 </h1>
-                <Link to="/chat" className="btn-primary">
+                <Link to="/chat" className="btn-primary" style={{ marginRight: '20px' }}>
                     チャットルームに入る
+                </Link>
+                <Link to="/browser" className="btn-primary">
+                    ブラウザを開く
                 </Link>
             </div>
         </div>
