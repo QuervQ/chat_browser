@@ -20,7 +20,8 @@ function createWindow() {
       // Security: Enable contextIsolation and disable nodeIntegration
       contextIsolation: true,
       nodeIntegration: false,
-      webviewTag: true
+      webviewTag: true,
+      webSecurity: true
     }
   });
   console.log(process.env.VITE_PUBLIC);

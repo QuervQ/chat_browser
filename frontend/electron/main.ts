@@ -28,6 +28,7 @@ function createWindow() {
             contextIsolation: true,
             nodeIntegration: false,
             webviewTag: true,
+            webSecurity: true,
         },
     })
     console.log(process.env.VITE_PUBLIC)
